@@ -1,0 +1,52 @@
+boot_device=/dev/vda1
+lvm_device=/dev/vda2
+
+# set keymap correct
+loadkeys azerty
+
+# if only wifi available
+iwctl
+-> station wlan0 scan
+-> station wlan0 get-networks
+-> station wlan0 connect <network>
+
+# partition disks
+-> /dev/XXX1 as efi boot
+-> /dev/XXX2 as linux-lvm
+
+# set up lvm
+pvcreate /dev/XXX2
+vgcreate vg01 /dev/XXX2
+lvcreate -l 100%FREE -n lv_root vg01
+
+
+
+pacstrap -K /mnt base linux linux-headers linux-firmware zsh \
+		 openssh base-devel networkmanager netctl dialog lvm2 vim sudo \ 
+                 wpa_supplicant wireless_tools 
+
+arch-chroot /mnt
+
+ln -s /usr/share/zoneinfo/Europe/Brussels /etc/localtime
+hwclock --systohc
+sed -i 's/#en_US.UTF.8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen
+locale-gen
+echo "LANG=en_US.UTF-8" >> /etc/locale.conf
+echo "KEYMAP=azerty" >> /etc/vconsole.conf
+
+systemctl enable sshd
+systemctl enable NetworkManager
+
+#edit /etc/mkinitcpio.conf
+#-> add "lvm2" between block and filesystems in HOOKS
+mkinitcpio -p linux
+mkinitcpio -p linux-lts
+
+useradd -m -s /bin/zsh -g users -G wheel hans
+passwd hans
+visudo
+#-> uncomment wheel thing
+
+pacman -S grub efibootmgr
+grub-install --target=x86_64-efi --bootloader-id=GRUB --efi-directory=/boot --boot-directory=/boot
+grub-mkconfig -o /boot/grub/grub.cfg
